@@ -18,13 +18,13 @@ FOUNDATION_EXPORT const unsigned char TesseractOCRVersionString[];
 #ifndef Tesseract_OCR_iOS_TesseractOCR_h
 #define Tesseract_OCR_iOS_TesseractOCR_h
 
-#import "G8Tesseract.h"
-#import "G8RecognizedBlock.h"
-#import "G8HierarchicalRecognizedBlock.h"
-#import "G8TesseractParameters.h"
-#import "G8RecognitionOperation.h"
-#import "G8Constants.h"
-#import "UIImage+G8Filters.h"
+#import <TesseractOCR/G8Tesseract.h>
+#import <TesseractOCR/G8RecognizedBlock.h>
+#import <TesseractOCR/G8HierarchicalRecognizedBlock.h>
+#import <TesseractOCR/G8TesseractParameters.h>
+#import <TesseractOCR/G8RecognitionOperation.h>
+#import <TesseractOCR/G8Constants.h>
+#import <TesseractOCR/UIImage+G8Filters.h>
 
 #endif
 

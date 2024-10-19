@@ -9,7 +9,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "G8Tesseract.h"
+#import <TesseractOCR/G8Tesseract.h>
 
 /**
  *  The type of a block function that can be used as a callback for the

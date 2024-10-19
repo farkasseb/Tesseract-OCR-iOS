@@ -8,7 +8,7 @@
 //
 
 #import <UIKit/UIKit.h>
-#import "G8Constants.h"
+#import <TesseractOCR/G8Constants.h>
 
 /**
  *  `G8RecognizedBlock` is a data structure that provides information about a

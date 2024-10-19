@@ -8,8 +8,8 @@
 //
 
 #import <UIKit/UIKit.h>
-#import "G8Constants.h"
-#import "G8TesseractDelegate.h"
+#import <TesseractOCR/G8Constants.h>
+#import <TesseractOCR/G8TesseractDelegate.h>
 
 /**
  *  Default value of `sourceResolution` property.

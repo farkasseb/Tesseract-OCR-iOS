@@ -1,6 +1,8 @@
 source 'https://github.com/CocoaPods/Specs.git'
 workspace 'Tesseract-OCR-iOS'
-xcodeproj 'TestsProject/TestsProject.xcodeproj/', 'Coverage' => :debug
+project 'TestsProject/TestsProject.xcodeproj/', 'Coverage' => :debug
+
+platform :ios, '12.0'
 
 target 'TestsProjectTests' do
 
