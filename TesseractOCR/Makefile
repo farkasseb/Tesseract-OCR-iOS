@@ -1,217 +1,122 @@
-LEPTON_NAME = leptonica-1.72
-PNG_NAME    = libpng-1.6.20
-JPEG_NAME   = jpeg-9a
-TIFF_NAME   = tiff-4.0.4
+# Existing path variables
+TESSERACT_ROOT = $(shell pwd)
+LEPTON_NAME = leptonica
+LEPTON_SRC = $(TESSERACT_ROOT)/$(LEPTON_NAME)
 
+# New Tesseract variables
+TESSERACT_NAME = tesseract-ocr
+TESSERACT_SRC = $(TESSERACT_ROOT)/$(TESSERACT_NAME)
+
+# Build variables for Leptonica and Tesseract
+ARCHS = arm64 arm64-simulator x86_64-simulator
+BUILD_DIR = $(TESSERACT_ROOT)/build/
+INSTALL_DIR = $(TESSERACT_ROOT)/install/
+LEPT_BUILD_DIR = $(TESSERACT_ROOT)/build/leptonica
+LEPT_INSTALL_DIR = $(TESSERACT_ROOT)/install/leptonica
+TESS_BUILD_DIR = $(TESSERACT_ROOT)/build/tesseract
+TESS_INSTALL_DIR = $(TESSERACT_ROOT)/install/tesseract
+FRAMEWORK_DIR = $(TESSERACT_ROOT)/xcframework
+
+# SDK paths
 SDK_IPHONEOS_PATH=$(shell xcrun --sdk iphoneos --show-sdk-path)
 SDK_IPHONESIMULATOR_PATH=$(shell xcrun --sdk iphonesimulator --show-sdk-path)
-XCODE_DEVELOPER_PATH=/Applications/Xcode.app/Contents/Developer
-XCODETOOLCHAIN_PATH=$(XCODE_DEVELOPER_PATH)/Toolchains/XcodeDefault.xctoolchain
-IOS_DEPLOY_TGT="7.0"
 
-TESSERACT_SRC = $(shell pwd)/tesseract-ocr
-LEPTON_SRC = $(shell pwd)/$(LEPTON_NAME)
-IMAGE_SRC = $(shell pwd)/libtiff-ios
-PNG_SRC   = $(IMAGE_SRC)/$(PNG_NAME)
-JPEG_SRC = $(IMAGE_SRC)/$(JPEG_NAME)
-TIFF_SRC = $(IMAGE_SRC)/$(TIFF_NAME)
+# Common flags
+COMMON_FLAGS = -pipe -no-cpp-precomp -miphoneos-version-min=15.0 -O2
 
-IMAGE_LIB_DIR = $(IMAGE_SRC)/dependencies/lib/
-IMAGE_INC_DIR = $(IMAGE_SRC)/dependencies/include/
-INCLUDE_DIR   = $(shell pwd)/include
-LEPT_INC_DIR  = $(INCLUDE_DIR)
-TESS_INC_DIR  = $(INCLUDE_DIR)
-LIB_FAT_DIR   = $(shell pwd)/lib
+# Targets
+.PHONY: all clean leptonica tesseract
 
-libtessfiles = libtesseract.a
-libleptfiles = liblept.a
-libpngfiles = libpng.a
-libjpegfiles = libjpeg.a
-libtifffiles = libtiff.a
+all: leptonica tesseract
 
-sdks = $(SDK_IPHONEOS_PATH) $(SDK_IPHONEOS_PATH) $(SDK_IPHONEOS_PATH) $(SDK_IPHONESIMULATOR_PATH) $(SDK_IPHONESIMULATOR_PATH)
-archs_all = armv7 armv7s arm64 i386 x86_64
-arch_names_all = arm-apple-darwin7 arm-apple-darwin7s arm-apple-darwin64 i386-apple-darwin x86_64-apple-darwin
-arch_names = $(foreach arch, $(ARCHS), $(call swap, $(arch), $(archs_all), $(arch_names_all) ) )
-ARCHS ?= $(archs_all)
+# Leptonica target
+leptonica: $(FRAMEWORK_DIR)/Leptonica.xcframework
 
-libleptfolders = $(foreach arch, $(arch_names), $(LEPTON_SRC)/$(arch)/)
-libtessfolders = $(foreach arch, $(arch_names), $(TESSERACT_SRC)/$(arch)/)
-libleptfolders_all = $(foreach arch, $(arch_names_all), $(LEPTON_SRC)/$(arch)/)
-libtessfolders_all = $(foreach arch, $(arch_names_all), $(TESSERACT_SRC)/$(arch)/)
+$(FRAMEWORK_DIR)/Leptonica.xcframework: $(LEPT_INSTALL_DIR)/ios/lib/libleptonica.a $(LEPT_INSTALL_DIR)/simulator/lib/libleptonica.a
+	mkdir -p $(FRAMEWORK_DIR)
+	rm -Rf $(FRAMEWORK_DIR)/Leptonica.xcframework
+	xcodebuild -create-xcframework \
+		-library $(LEPT_INSTALL_DIR)/ios/lib/libleptonica.a \
+		-headers $(LEPT_INSTALL_DIR)/ios/include \
+		-library $(LEPT_INSTALL_DIR)/simulator/lib/libleptonica.a \
+		-headers $(LEPT_INSTALL_DIR)/simulator/include \
+		-output $(FRAMEWORK_DIR)/Leptonica.xcframework
 
-libleptmakefile = $(foreach folder, $(libleptfolders), $(addprefix $(folder), Makefile) )
-libtessmakefile = $(foreach folder, $(libtessfolders), $(addprefix $(folder), Makefile) )
-imagesmakefile  = $(addprefix $(IMAGE_SRC)/, Makefile)
+$(LEPT_INSTALL_DIR)/ios/lib/libleptonica.a $(LEPT_INSTALL_DIR)/simulator/lib/libleptonica.a: $(LEPTON_SRC)/configure
+	@echo "Building for architectures: $(ARCHS)"
+	for arch in $(ARCHS); do \
+		echo "Building for $$arch"; \
+		mkdir -p $(LEPT_BUILD_DIR)/$$arch; \
+		cd $(LEPT_BUILD_DIR)/$$arch; \
+		if [ $$arch = "arm64-simulator" ] || [ $$arch = "x86_64-simulator" ]; then \
+			export SDKROOT=$(SDK_IPHONESIMULATOR_PATH); \
+			export HOST=$${arch%-simulator}-apple-darwin; \
+			export CFLAGS="$(COMMON_FLAGS) -arch $${arch%-simulator} -isysroot $$SDKROOT -target $${arch%-simulator}-apple-ios15.0-simulator"; \
+			export INSTALL_DIR=$(LEPT_INSTALL_DIR)/simulator; \
+		else \
+			export SDKROOT=$(SDK_IPHONEOS_PATH); \
+			export HOST=$$arch-apple-darwin; \
+			export CFLAGS="$(COMMON_FLAGS) -arch $$arch -isysroot $$SDKROOT -target $$arch-apple-ios15.0"; \
+			export INSTALL_DIR=$(LEPT_INSTALL_DIR)/ios; \
+		fi; \
+		export CPPFLAGS=$$CFLAGS; \
+		export LDFLAGS="-arch $${arch%-simulator} -L$$SDKROOT/usr/lib/"; \
+		echo "Configuring for $$arch"; \
+		$(LEPTON_SRC)/configure --host=$$HOST --prefix=$$INSTALL_DIR --enable-shared=no --disable-programs --without-zlib --without-libpng --without-jpeg --without-giflib --without-libtiff --without-libwebp --without-libopenjpeg || exit 1; \
+		echo "Building for $$arch"; \
+		make -j8 || exit 1; \
+		echo "Installing for $$arch"; \
+		make install || exit 1; \
+	done
+	mkdir -p $(LEPT_INSTALL_DIR)/simulator/lib
+	xcrun lipo -create $(LEPT_BUILD_DIR)/arm64-simulator/src/.libs/libleptonica.a $(LEPT_BUILD_DIR)/x86_64-simulator/src/.libs/libleptonica.a -output $(LEPT_INSTALL_DIR)/simulator/lib/libleptonica.a
 
-libleptfat = $(LIB_FAT_DIR)/$(libleptfiles)
-libtessfat = $(LIB_FAT_DIR)/$(libtessfiles)
-imagesfat  = $(libpngfat) $(libjpegfat) $(libtifffat)
-libpngfat  = $(LIB_FAT_DIR)/$(libpngfiles)
-libjpegfat = $(LIB_FAT_DIR)/$(libjpegfiles)
-libtifffat = $(LIB_FAT_DIR)/$(libtifffiles)
+# Tesseract target
+tesseract: $(FRAMEWORK_DIR)/Tesseract.xcframework
 
-libtess    = $(foreach folder, $(libtessfolders), $(addprefix $(folder)/lib/, $(libtessfiles)) )
-liblept    = $(foreach folder, $(libleptfolders), $(addprefix $(folder)/lib/, $(libleptfiles)) )
-images     = $(libpng) $(libjpeg) $(libtiff)
-libpng     = $(addprefix $(IMAGE_LIB_DIR), $(libpngfiles))
-libjpeg    = $(addprefix $(IMAGE_LIB_DIR), $(libjpegfiles))
-libtiff    = $(addprefix $(IMAGE_LIB_DIR), $(libtifffiles))
+$(FRAMEWORK_DIR)/Tesseract.xcframework: $(TESS_INSTALL_DIR)/ios/lib/libtesseract.a $(TESS_INSTALL_DIR)/simulator/lib/libtesseract.a
+	mkdir -p $(FRAMEWORK_DIR)
+	rm -Rf $(FRAMEWORK_DIR)/Tesseract.xcframework
+	xcodebuild -create-xcframework \
+		-library $(TESS_INSTALL_DIR)/ios/lib/libtesseract.a \
+		-headers $(TESS_INSTALL_DIR)/ios/include \
+		-library $(TESS_INSTALL_DIR)/simulator/lib/libtesseract.a \
+		-headers $(TESS_INSTALL_DIR)/simulator/include \
+		-output $(FRAMEWORK_DIR)/Tesseract.xcframework
 
-libtessautogen = $(TESSERACT_SRC)/autogen.sh
-libtessconfig = $(TESSERACT_SRC)/configure
-libleptconfig = $(LEPTON_SRC)/configure
+$(TESS_INSTALL_DIR)/ios/lib/libtesseract.a $(TESS_INSTALL_DIR)/simulator/lib/libtesseract.a: $(TESSERACT_SRC)/configure $(LEPT_INSTALL_DIR)/ios/lib/libleptonica.a
+	@echo "Building Tesseract for architectures: $(ARCHS)"
+	for arch in $(ARCHS); do \
+		echo "Building Tesseract for $$arch"; \
+		mkdir -p $(TESS_BUILD_DIR)/$$arch; \
+		cd $(TESS_BUILD_DIR)/$$arch; \
+		if [ $$arch = "arm64-simulator" ] || [ $$arch = "x86_64-simulator" ]; then \
+			export SDKROOT=$(SDK_IPHONESIMULATOR_PATH); \
+			export HOST=$${arch%-simulator}-apple-darwin; \
+			export CFLAGS="$(COMMON_FLAGS) -arch $${arch%-simulator} -isysroot $$SDKROOT -target $${arch%-simulator}-apple-ios15.0-simulator"; \
+			export INSTALL_DIR=$(TESS_INSTALL_DIR)/simulator; \
+			export LEPTONICA_LIBS="-L$(LEPT_INSTALL_DIR)/simulator/lib -lleptonica"; \
+			export LEPTONICA_CFLAGS="-I$(LEPT_INSTALL_DIR)/simulator/include"; \
+		else \
+			export SDKROOT=$(SDK_IPHONEOS_PATH); \
+			export HOST=$$arch-apple-darwin; \
+			export CFLAGS="$(COMMON_FLAGS) -arch $$arch -isysroot $$SDKROOT -target $$arch-apple-ios15.0"; \
+			export INSTALL_DIR=$(TESS_INSTALL_DIR)/ios; \
+			export LEPTONICA_LIBS="-L$(LEPT_INSTALL_DIR)/ios/lib -lleptonica"; \
+			export LEPTONICA_CFLAGS="-I$(LEPT_INSTALL_DIR)/ios/include"; \
+		fi; \
+		export CPPFLAGS=$$CFLAGS; \
+		export LDFLAGS="-arch $${arch%-simulator} -L$$SDKROOT/usr/lib/"; \
+		echo "Configuring Tesseract for $$arch"; \
+		$(TESSERACT_SRC)/configure --host=$$HOST --prefix=$$INSTALL_DIR --disable-shared --disable-graphics --disable-legacy --disable-oem --disable-doc --disable-openmp --with-pic --with-extra-libraries=$$SDKROOT/usr/lib LEPTONICA_LIBS="$$LEPTONICA_LIBS" LEPTONICA_CFLAGS="$$LEPTONICA_CFLAGS" || exit 1; \
+		echo "Building Tesseract for $$arch"; \
+		make -j8 || exit 1; \
+		echo "Installing Tesseract for $$arch"; \
+		make install || exit 1; \
+	done
+	mkdir -p $(TESS_INSTALL_DIR)/simulator/lib
+	xcrun lipo -create $(TESS_BUILD_DIR)/arm64-simulator/src/.libs/libtesseract.a $(TESS_BUILD_DIR)/x86_64-simulator/src/.libs/libtesseract.a -output $(TESS_INSTALL_DIR)/simulator/lib/libtesseract.a
 
-index = $(words $(shell a="$(2)";echo $${a/$(1)*/$(1)} ))
-swap  = $(word $(call index,$(1),$(2)),$(3))
-
-dependant_libs = $(libtessfat) $(libleptfat) $(libpngfat) $(libjpegfat) $(libtifffat)
-
-common_cflags = -L$(LIB_FAT_DIR) -Qunused-arguments -arch $(call swap, $*, $(arch_names_all), $(archs_all)) -pipe -no-cpp-precomp -isysroot $$SDKROOT -miphoneos-version-min=$(IOS_DEPLOY_TGT) -O2
-
-.PHONY : all
-all : $(dependant_libs)
-
-#######################
-# TESSERACT-OCR
-#######################
-$(libtessfat) : $(libtess)
-	mkdir -p $(LIB_FAT_DIR)
-	xcrun lipo $(realpath $(addsuffix lib/$(@F), $(libtessfolders_all)) ) -create -output $@
-	mkdir -p $(TESS_INC_DIR)
-	cp -rvf $(firstword $(libtessfolders))/include/tesseract $(TESS_INC_DIR)
-
-$(libtess) : $(libtessmakefile)
-	cd $(abspath $(@D)/..) && $(MAKE) -sj8 && $(MAKE) install
-
-$(TESSERACT_SRC)/%/Makefile : $(libtessconfig) $(libleptfat)
-	export LIBS="-lz -lpng -ljpeg -ltiff" ; \
-	export SDKROOT="$(call swap, $*, $(arch_names_all), $(sdks))" ; \
-	export CFLAGS="-I$(TESSERACT_SRC)/$*/ $(common_cflags) -fembed-bitcode" ; \
-	export CPPFLAGS=$$CFLAGS ; \
-	export CXXFLAGS="-I$(TESSERACT_SRC)/$*/ $(common_cflags) -Wno-deprecated-register"; \
-	export LDFLAGS="-L$$SDKROOT/usr/lib/ -L$(LEPTON_SRC)/$*/src/.libs" ; \
-	export LIBLEPT_HEADERSDIR=$(TESSERACT_SRC)/$*/ ; \
-	mkdir -p $(@D) ; \
-	cd $(@D) ; \
-	ln -s $(LEPTON_SRC)/src/ leptonica ; \
-	../configure --host=$* --prefix=`pwd` --enable-shared=no --disable-graphics
-
-$(libtessconfig) : $(libtessautogen)
-	cd $(@D) && ./autogen.sh 2> /dev/null
-
-#######################
-# LEPTONLIB
-#######################
-$(libleptfat) : $(liblept)
-	mkdir -p $(LIB_FAT_DIR)
-	xcrun lipo $(realpath $(addsuffix lib/$(@F), $(libleptfolders_all)) ) -create -output $@
-	mkdir -p $(LEPT_INC_DIR)
-	cp -rvf $(firstword $(libleptfolders))/include/leptonica $(LEPT_INC_DIR)
-
-$(liblept) : $(libleptmakefile)
-	cd $(abspath $(@D)/..) ; \
-	$(MAKE) -sj8 && $(MAKE) install
-
-$(LEPTON_SRC)/%/Makefile : $(imagesfat) $(libleptconfig)
-	export LIBS="-lz -lpng -ljpeg -ltiff" ; \
-	export SDKROOT="$(call swap, $*, $(arch_names_all), $(sdks))" ; \
-	export CFLAGS="-I$(INCLUDE_DIR) $(common_cflags) -fembed-bitcode" ; \
-	export CPPFLAGS=$$CFLAGS ; \
-	export CXXFLAGS="-I$(INCLUDE_DIR) $(common_cflags) -Wno-deprecated-register"; \
-    export LDFLAGS="-L$$SDKROOT/usr/lib/ -L$(LIB_FAT_DIR)" ; \
-	mkdir -p $(@D) ; \
-	cd $(@D) ; \
-    ../configure --host=$* --prefix=`pwd` --enable-shared=no --disable-programs --with-zlib --with-libpng --with-jpeg --without-giflib --with-libtiff
-
-#######################
-# Build libtiff and all of it's dependencies
-#######################
-$(imagesfat) : $(images)
-	mkdir -p $(@D)
-	cp -rvf $? $(@D)
-	mkdir -p $(INCLUDE_DIR)
-	cp -rvf $(IMAGE_INC_DIR) $(INCLUDE_DIR)
-
-$(images) : $(imagesmakefile) FORCE
-	cd $(IMAGE_SRC) ; \
-	until `$(MAKE) -s`; do sleep 5; done
-
-#######################
-# Download dependencies
-#######################
-$(imagesmakefile) $(libtessautogen) :
-	git submodule init
-	git submodule update
-
-$(libleptconfig) :
-	curl http://leptonica.org/source/$(LEPTON_NAME).tar.gz | tar -xpf-
-	cd $(LEPTON_NAME) ; \
-	patch -p1 < ../leptonica.patch
-
-#######################
-# Clean
-#######################
-.PHONY : clean
-clean : cleanimages cleanlept cleantess
-
-.PHONY : distclean
-distclean : distcleanimages distcleanlept distcleantess
-
-.PHONY : mostlyclean
-mostlyclean : mostlycleanimages mostlycleanlept mostlycleantess
-
-.PHONY : cleanimages
-cleanimages :
-	cd $(IMAGE_SRC) ; \
-	$(MAKE) clean
-
-.PHONY : cleanlept
-cleanlept :
-	for folder in $(realpath $(libleptfolders_all) ); do \
-        cd $$folder; \
-        $(MAKE) clean; \
-	done ;
-
-.PHONY : cleantess
-cleantess :
-	for folder in $(realpath $(libtessfolders_all) ); do \
-        cd $$folder; \
-        $(MAKE) clean; \
-    done ;
-
-.PHONY : mostlycleanimages
-mostlycleanimages :
-
-.PHONY : mostlycleanlept
-mostlycleanlept :
-	for folder in $(realpath $(libleptfolders) ); do \
-        cd $$folder; \
-        $(MAKE) mostlyclean; \
-    done ;
-
-.PHONY : mostlycleantess
-mostlycleantess :
-	for folder in $(realpath $(libtessfolders_all) ); do \
-        cd $$folder; \
-        $(MAKE) mostlyclean; \
-    done ;
-
-.PHONY : distcleanimages
-distcleanimages :
-	-rm -rf $(IMAGE_SRC)
-
-PHONY : distcleanlept
-distcleanlept :
-	-rm -rf $(LEPT_INC_DIR)/leptonica
-	-rm -rf $(libleptfat)
-	-rm -rf $(LEPTON_SRC)
-
-.PHONY : distcleantess
-distcleantess :
-	-rm -rf $(TESS_INC_DIR)/tesseract
-	-rm -rf $(libtessfat)
-	-rm -rf $(TESSERACT_SRC)
-
-.PHONY : FORCE
-FORCE :
+clean:
+	rm -Rf $(BUILD_DIR)
+	rm -Rf $(INSTALL_DIR)
