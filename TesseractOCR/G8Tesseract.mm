@@ -15,14 +15,17 @@
 #import "G8RecognizedBlock.h"
 #import "G8HierarchicalRecognizedBlock.h"
 
-#import "baseapi.h"
-#import "environ.h"
-#import "pix.h"
-#import "ocrclass.h"
-#import "allheaders.h"
-#import "genericvector.h"
-#import "strngs.h"
-#import "renderer.h"
+#import <Tesseract/baseapi.h>
+
+//#import <Leptonica/environ.h>
+//#import <Leptonica/pix.h>
+#import <Tesseract/ocrclass.h>
+
+#import <Leptonica/allheaders.h>
+#import <Leptonica/alltypes.h>
+//#import "genericvector.h"
+//#import "strngs.h"
+#import <Tesseract/renderer.h>
 
 NSInteger const kG8DefaultResolution = 72;
 NSInteger const kG8MinCredibleResolution = 70;
@@ -34,7 +37,7 @@ namespace tesseract {
 
 @interface G8Tesseract () {
     tesseract::TessBaseAPI *_tesseract;
-    ETEXT_DESC *_monitor;
+    tesseract::ETEXT_DESC *_monitor;
 }
 
 @property (nonatomic, assign, readonly) tesseract::TessBaseAPI *tesseract;
@@ -94,7 +97,7 @@ namespace tesseract {
         _sourceResolution = kG8DefaultResolution;
         _rect = CGRectZero;
         
-        _monitor = new ETEXT_DESC();
+        _monitor = new tesseract::ETEXT_DESC();
         _monitor->cancel = tesseractCancelCallbackFunction;
         _monitor->cancel_this = (__bridge void*)self;
         

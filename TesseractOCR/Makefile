@@ -9,6 +9,8 @@ JPEG_DIR_NAME = jpeg-9a
 JPEG_SRC = $(TESSERACT_ROOT)/$(JPEG_DIR_NAME)
 PNG_NAME = libpng-1.6.44
 PNG_SRC = $(TESSERACT_ROOT)/$(PNG_NAME)
+TIFF_NAME = tiff-4.7.0
+TIFF_SRC = $(TESSERACT_ROOT)/$(TIFF_NAME)
 
 # Build variables
 ARCHS = arm64 arm64-simulator x86_64-simulator
@@ -22,6 +24,8 @@ JPEG_BUILD_DIR = $(TESSERACT_ROOT)/build/jpeg
 JPEG_INSTALL_DIR = $(TESSERACT_ROOT)/install/jpeg
 PNG_BUILD_DIR = $(TESSERACT_ROOT)/build/png
 PNG_INSTALL_DIR = $(TESSERACT_ROOT)/install/png
+TIFF_BUILD_DIR = $(TESSERACT_ROOT)/build/tiff
+TIFF_INSTALL_DIR = $(TESSERACT_ROOT)/install/tiff
 FRAMEWORK_DIR = $(TESSERACT_ROOT)/xcframework
 
 # SDK paths
@@ -55,9 +59,9 @@ define DEVICE_FLAGS
 endef
 
 # Targets
-.PHONY: all leptonica tesseract autogen-tesseract xcframeworks leptonica-xcframework tesseract-xcframework clean clean-leptonica clean-tesseract distclean-tesseract jpeg clean-jpeg jpeg-xcframework png clean-png png-xcframework
+.PHONY: all leptonica tesseract autogen-tesseract xcframeworks leptonica-xcframework tesseract-xcframework clean clean-leptonica clean-tesseract distclean-tesseract jpeg clean-jpeg jpeg-xcframework png clean-png png-xcframework tiff clean-tiff tiff-xcframework
 
-all: jpeg png leptonica tesseract
+all: png jpeg tiff leptonica tesseract
 
 # JPEG target
 jpeg: clean-jpeg $(JPEG_SRC)/configure
@@ -144,6 +148,54 @@ png: clean-png $(PNG_SRC)/configure
 
 $(PNG_SRC)/configure:
 	curl -L https://download.sourceforge.net/libpng/$(PNG_NAME).tar.gz | tar -xpf-
+
+# TIFF target
+tiff: clean-tiff jpeg $(TIFF_SRC)/configure
+	@echo "Building tiff for architectures: $(ARCHS)"
+	for arch in $(ARCHS); do \
+		echo "Building tiff for $$arch"; \
+		mkdir -p $(TIFF_BUILD_DIR)/$$arch; \
+		cd $(TIFF_BUILD_DIR)/$$arch; \
+		$(COMMON_EXPORTS); \
+		if [ $$arch = "arm64-simulator" ] || [ $$arch = "x86_64-simulator" ]; then \
+			$(SIMULATOR_FLAGS); \
+			export INSTALL_DIR=$(TIFF_INSTALL_DIR)/simulator; \
+			jpeg_include_dir=$(JPEG_INSTALL_DIR)/simulator/include; \
+			jpeg_lib_dir=$(JPEG_INSTALL_DIR)/simulator/lib; \
+		else \
+			$(DEVICE_FLAGS); \
+			export INSTALL_DIR=$(TIFF_INSTALL_DIR)/ios; \
+			jpeg_include_dir=$(JPEG_INSTALL_DIR)/ios/include; \
+			jpeg_lib_dir=$(JPEG_INSTALL_DIR)/ios/lib; \
+		fi; \
+		export CPPFLAGS="$$CFLAGS -I$$jpeg_include_dir"; \
+		export CXXFLAGS="$$CFLAGS -I$$jpeg_include_dir"; \
+		export LDFLAGS="$$LDFLAGS -L$$jpeg_lib_dir"; \
+		echo "Configuring tiff for $$arch"; \
+		$(TIFF_SRC)/configure --host=$$HOST --prefix=$$INSTALL_DIR \
+			--enable-static --disable-shared \
+			--enable-fast-install \
+			--disable-cxx \
+			--disable-zlib --disable-lzma --disable-webp \
+			--disable-zstd --disable-pixarlog \
+			--disable-tools --disable-tests \
+			--without-x \
+			--with-jpeg-include-dir=$$jpeg_include_dir \
+			--with-jpeg-lib-dir=$$jpeg_lib_dir \
+			--with-pic || exit 1; \
+		echo "Building tiff for $$arch"; \
+		$(MAKE) V=1 -j8 && $(MAKE) install || exit 1; \
+	done
+	@echo "Creating tiff simulator universal binary"
+	mkdir -p $(TIFF_INSTALL_DIR)/simulator/lib $(TIFF_INSTALL_DIR)/ios/lib
+	xcrun lipo -create \
+		$(TIFF_BUILD_DIR)/arm64-simulator/libtiff/.libs/libtiff.a \
+		$(TIFF_BUILD_DIR)/x86_64-simulator/libtiff/.libs/libtiff.a \
+		-output $(TIFF_INSTALL_DIR)/simulator/lib/libtiff.a
+	cp $(TIFF_BUILD_DIR)/arm64/libtiff/.libs/libtiff.a $(TIFF_INSTALL_DIR)/ios/lib/
+
+$(TIFF_SRC)/configure:
+	curl -L https://download.osgeo.org/libtiff/$(TIFF_NAME).tar.gz | tar -xpf-
 
 # Leptonica target
 leptonica: clean-leptonica
@@ -239,7 +291,7 @@ tesseract: clean-tesseract autogen-tesseract
 	cp -R $(TESS_BUILD_DIR)/x86_64-simulator/include/tesseract/* $(TESS_INSTALL_DIR)/simulator/include/tesseract/
 
 # XCFramework creation
-xcframeworks: jpeg-xcframework png-xcframework leptonica-xcframework tesseract-xcframework
+xcframeworks: jpeg-xcframework png-xcframework tiff-xcframework leptonica-xcframework tesseract-xcframework
 
 define create_xcframework
 	mkdir -p $(FRAMEWORK_DIR)
@@ -258,6 +310,9 @@ jpeg-xcframework:
 png-xcframework:
 	$(call create_xcframework,PNG,$(PNG_INSTALL_DIR),png)
 
+tiff-xcframework:
+	$(call create_xcframework,TIFF,$(TIFF_INSTALL_DIR),tiff)
+
 leptonica-xcframework:
 	$(call create_xcframework,Leptonica,$(LEPT_INSTALL_DIR),leptonica)
 
@@ -275,6 +330,11 @@ clean-png:
 	rm -Rf $(PNG_INSTALL_DIR)
 	rm -Rf $(PNG_SRC)
 
+clean-tiff:
+	rm -Rf $(TIFF_BUILD_DIR)
+	rm -Rf $(TIFF_INSTALL_DIR)
+	rm -Rf $(TIFF_SRC)
+
 clean-leptonica:
 	rm -Rf $(LEPT_BUILD_DIR)
 	rm -Rf $(LEPT_INSTALL_DIR)
@@ -283,6 +343,6 @@ clean-tesseract:
 	rm -Rf $(TESS_BUILD_DIR)
 	rm -Rf $(TESS_INSTALL_DIR)
 
-clean: clean-jpeg clean-png clean-leptonica clean-tesseract
+clean: clean-jpeg clean-png clean-tiff clean-leptonica clean-tesseract
 	cd $(TESSERACT_SRC) && [ -f Makefile ] && $(MAKE) distclean || true
 	rm -Rf $(BUILD_DIR) $(INSTALL_DIR)
