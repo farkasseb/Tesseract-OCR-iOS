@@ -15,17 +15,15 @@
 #import "G8RecognizedBlock.h"
 #import "G8HierarchicalRecognizedBlock.h"
 
-#import <Tesseract/baseapi.h>
-
-//#import <Leptonica/environ.h>
-//#import <Leptonica/pix.h>
-#import <Tesseract/ocrclass.h>
-
 #import <Leptonica/allheaders.h>
 #import <Leptonica/alltypes.h>
+
+#import <Tesseract/baseapi.h>
+#import <Tesseract/ocrclass.h>
+#import <Tesseract/renderer.h>
+
 //#import "genericvector.h"
 //#import "strngs.h"
-#import <Tesseract/renderer.h>
 
 NSInteger const kG8DefaultResolution = 72;
 NSInteger const kG8MinCredibleResolution = 70;
