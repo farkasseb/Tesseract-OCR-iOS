@@ -4,6 +4,9 @@ LEPTON_NAME = leptonica
 LEPTON_SRC = $(TESSERACT_ROOT)/$(LEPTON_NAME)
 TESSERACT_NAME = tesseract-ocr
 TESSERACT_SRC = $(TESSERACT_ROOT)/$(TESSERACT_NAME)
+JPEG_SRC_NAME = jpegsrc.v9a
+JPEG_DIR_NAME = jpeg-9a
+JPEG_SRC = $(TESSERACT_ROOT)/$(JPEG_DIR_NAME)
 
 # Build variables
 ARCHS = arm64 arm64-simulator x86_64-simulator
@@ -13,6 +16,8 @@ LEPT_BUILD_DIR = $(TESSERACT_ROOT)/build/leptonica
 LEPT_INSTALL_DIR = $(TESSERACT_ROOT)/install/leptonica
 TESS_BUILD_DIR = $(TESSERACT_ROOT)/build/tesseract
 TESS_INSTALL_DIR = $(TESSERACT_ROOT)/install/tesseract
+JPEG_BUILD_DIR = $(TESSERACT_ROOT)/build/jpeg
+JPEG_INSTALL_DIR = $(TESSERACT_ROOT)/install/jpeg
 FRAMEWORK_DIR = $(TESSERACT_ROOT)/xcframework
 
 # SDK paths
@@ -46,9 +51,53 @@ define DEVICE_FLAGS
 endef
 
 # Targets
-.PHONY: all leptonica tesseract autogen-tesseract xcframeworks leptonica-xcframework tesseract-xcframework clean clean-leptonica clean-tesseract distclean-tesseract
+.PHONY: all leptonica tesseract autogen-tesseract xcframeworks leptonica-xcframework tesseract-xcframework clean clean-leptonica clean-tesseract distclean-tesseract jpeg clean-jpeg jpeg-xcframework
 
-all: leptonica tesseract
+all: jpeg leptonica tesseract
+
+# JPEG target
+jpeg: clean-jpeg $(JPEG_SRC)/configure
+	@echo "Building jpeg for architectures: $(ARCHS)"
+	for arch in $(ARCHS); do \
+		echo "Building jpeg for $$arch"; \
+		mkdir -p $(JPEG_BUILD_DIR)/$$arch; \
+		cd $(JPEG_BUILD_DIR)/$$arch; \
+		$(COMMON_EXPORTS); \
+		if [ $$arch = "arm64-simulator" ] || [ $$arch = "x86_64-simulator" ]; then \
+			export SDKROOT=$(SDK_IPHONESIMULATOR_PATH); \
+			if [ $$arch = "arm64-simulator" ]; then \
+				export HOST=aarch64-apple-darwin; \
+			else \
+				export HOST=x86_64-apple-darwin; \
+			fi; \
+			export CFLAGS="$(COMMON_FLAGS) -arch $${arch%%-simulator} -isysroot $$SDKROOT -target $${arch%%-simulator}-apple-ios15.0-simulator"; \
+			export LDFLAGS="-arch $${arch%%-simulator} -L$$SDKROOT/usr/lib/"; \
+			export INSTALL_DIR=$(JPEG_INSTALL_DIR)/simulator; \
+		else \
+			export SDKROOT=$(SDK_IPHONEOS_PATH); \
+			export HOST=aarch64-apple-darwin; \
+			export CFLAGS="$(COMMON_FLAGS) -arch $$arch -isysroot $$SDKROOT -target $$arch-apple-ios15.0"; \
+			export LDFLAGS="-arch $$arch -L$$SDKROOT/usr/lib/"; \
+			export INSTALL_DIR=$(JPEG_INSTALL_DIR)/ios; \
+		fi; \
+		export CPPFLAGS="$$CFLAGS"; \
+		export CXXFLAGS="$$CFLAGS"; \
+		echo "Configuring jpeg for $$arch"; \
+		$(JPEG_SRC)/configure --host=$$HOST --prefix=$$INSTALL_DIR \
+			--enable-static --disable-shared \
+			--with-pic || exit 1; \
+		echo "Building jpeg for $$arch"; \
+		$(MAKE) V=1 -j8 && $(MAKE) install || exit 1; \
+	done
+	@echo "Creating jpeg simulator universal binary"
+	mkdir -p $(JPEG_INSTALL_DIR)/simulator/lib
+	xcrun lipo -create \
+		$(JPEG_BUILD_DIR)/arm64-simulator/.libs/libjpeg.a \
+		$(JPEG_BUILD_DIR)/x86_64-simulator/.libs/libjpeg.a \
+		-output $(JPEG_INSTALL_DIR)/simulator/lib/libjpeg.a
+
+$(JPEG_SRC)/configure:
+	curl http://www.ijg.org/files/$(JPEG_SRC_NAME).tar.gz | tar -xpf-
 
 # Leptonica target
 leptonica: clean-leptonica
@@ -144,7 +193,7 @@ tesseract: clean-tesseract autogen-tesseract
 	cp -R $(TESS_BUILD_DIR)/x86_64-simulator/include/tesseract/* $(TESS_INSTALL_DIR)/simulator/include/tesseract/
 
 # XCFramework creation
-xcframeworks: leptonica-xcframework tesseract-xcframework
+xcframeworks: jpeg-xcframework leptonica-xcframework tesseract-xcframework
 
 define create_xcframework
 	mkdir -p $(FRAMEWORK_DIR)
@@ -157,6 +206,9 @@ define create_xcframework
 		-output $(FRAMEWORK_DIR)/$(1).xcframework
 endef
 
+jpeg-xcframework:
+	$(call create_xcframework,JPEG,$(JPEG_INSTALL_DIR),jpeg)
+
 leptonica-xcframework:
 	$(call create_xcframework,Leptonica,$(LEPT_INSTALL_DIR),leptonica)
 
@@ -164,6 +216,11 @@ tesseract-xcframework:
 	$(call create_xcframework,Tesseract,$(TESS_INSTALL_DIR),tesseract)
 
 # Clean targets
+clean-jpeg:
+	rm -Rf $(JPEG_BUILD_DIR)
+	rm -Rf $(JPEG_INSTALL_DIR)
+	rm -Rf $(JPEG_SRC)
+
 clean-leptonica:
 	rm -Rf $(LEPT_BUILD_DIR)
 	rm -Rf $(LEPT_INSTALL_DIR)
@@ -172,6 +229,6 @@ clean-tesseract:
 	rm -Rf $(TESS_BUILD_DIR)
 	rm -Rf $(TESS_INSTALL_DIR)
 
-clean: clean-leptonica clean-tesseract
+clean: clean-jpeg clean-leptonica clean-tesseract
 	cd $(TESSERACT_SRC) && [ -f Makefile ] && $(MAKE) distclean || true
 	rm -Rf $(BUILD_DIR) $(INSTALL_DIR)
