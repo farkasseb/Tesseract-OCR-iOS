@@ -7,6 +7,8 @@ TESSERACT_SRC = $(TESSERACT_ROOT)/$(TESSERACT_NAME)
 JPEG_SRC_NAME = jpegsrc.v9a
 JPEG_DIR_NAME = jpeg-9a
 JPEG_SRC = $(TESSERACT_ROOT)/$(JPEG_DIR_NAME)
+PNG_NAME = libpng-1.6.44
+PNG_SRC = $(TESSERACT_ROOT)/$(PNG_NAME)
 
 # Build variables
 ARCHS = arm64 arm64-simulator x86_64-simulator
@@ -18,6 +20,8 @@ TESS_BUILD_DIR = $(TESSERACT_ROOT)/build/tesseract
 TESS_INSTALL_DIR = $(TESSERACT_ROOT)/install/tesseract
 JPEG_BUILD_DIR = $(TESSERACT_ROOT)/build/jpeg
 JPEG_INSTALL_DIR = $(TESSERACT_ROOT)/install/jpeg
+PNG_BUILD_DIR = $(TESSERACT_ROOT)/build/png
+PNG_INSTALL_DIR = $(TESSERACT_ROOT)/install/png
 FRAMEWORK_DIR = $(TESSERACT_ROOT)/xcframework
 
 # SDK paths
@@ -51,9 +55,9 @@ define DEVICE_FLAGS
 endef
 
 # Targets
-.PHONY: all leptonica tesseract autogen-tesseract xcframeworks leptonica-xcframework tesseract-xcframework clean clean-leptonica clean-tesseract distclean-tesseract jpeg clean-jpeg jpeg-xcframework
+.PHONY: all leptonica tesseract autogen-tesseract xcframeworks leptonica-xcframework tesseract-xcframework clean clean-leptonica clean-tesseract distclean-tesseract jpeg clean-jpeg jpeg-xcframework png clean-png png-xcframework
 
-all: jpeg leptonica tesseract
+all: jpeg png leptonica tesseract
 
 # JPEG target
 jpeg: clean-jpeg $(JPEG_SRC)/configure
@@ -98,6 +102,48 @@ jpeg: clean-jpeg $(JPEG_SRC)/configure
 
 $(JPEG_SRC)/configure:
 	curl http://www.ijg.org/files/$(JPEG_SRC_NAME).tar.gz | tar -xpf-
+
+# PNG target
+png: clean-png $(PNG_SRC)/configure
+	@echo "Building png for architectures: $(ARCHS)"
+	for arch in $(ARCHS); do \
+		echo "Building png for $$arch"; \
+		mkdir -p $(PNG_BUILD_DIR)/$$arch; \
+		cd $(PNG_BUILD_DIR)/$$arch; \
+		$(COMMON_EXPORTS); \
+		if [ $$arch = "arm64-simulator" ] || [ $$arch = "x86_64-simulator" ]; then \
+			$(SIMULATOR_FLAGS); \
+			export INSTALL_DIR=$(PNG_INSTALL_DIR)/simulator; \
+		else \
+			$(DEVICE_FLAGS); \
+			export INSTALL_DIR=$(PNG_INSTALL_DIR)/ios; \
+		fi; \
+		export CPPFLAGS="$$CFLAGS"; \
+		export CXXFLAGS="$$CFLAGS"; \
+		echo "Configuring png for $$arch"; \
+		$(PNG_SRC)/configure --host=$$HOST --prefix=$$INSTALL_DIR \
+			--enable-static --disable-shared \
+			--with-pic || exit 1; \
+		echo "Building png for $$arch"; \
+		$(MAKE) V=1 -j8 && $(MAKE) install || exit 1; \
+	done
+	@echo "Creating png simulator universal binary"
+	mkdir -p $(PNG_INSTALL_DIR)/simulator/lib $(PNG_INSTALL_DIR)/ios/lib
+	xcrun lipo -create \
+		$(PNG_BUILD_DIR)/arm64-simulator/.libs/libpng16.a \
+		$(PNG_BUILD_DIR)/x86_64-simulator/.libs/libpng16.a \
+		-output $(PNG_INSTALL_DIR)/simulator/lib/libpng.a
+	rm -f $(PNG_INSTALL_DIR)/ios/lib/*.la $(PNG_INSTALL_DIR)/ios/lib/libpng.a $(PNG_INSTALL_DIR)/simulator/lib/*.la $(PNG_INSTALL_DIR)/simulator/lib/libpng.a
+	rm -rf $(PNG_INSTALL_DIR)/ios/lib/pkgconfig $(PNG_BUILD_DIR)/simulator/lib/pkgconfig
+	mv $(PNG_INSTALL_DIR)/ios/lib/libpng16.a $(PNG_INSTALL_DIR)/ios/lib/libpng.a
+	mv $(PNG_INSTALL_DIR)/simulator/lib/libpng16.a $(PNG_INSTALL_DIR)/simulator/lib/libpng.a
+	rm -f $(PNG_INSTALL_DIR)/ios/include/*.h $(PNG_INSTALL_DIR)/simulator/include/*.h
+	cp -R $(PNG_INSTALL_DIR)/simulator/include/libpng16/* $(PNG_INSTALL_DIR)/simulator/include/
+	cp -R $(PNG_INSTALL_DIR)/ios/include/libpng16/* $(PNG_INSTALL_DIR)/ios/include/
+	rm -rf $(PNG_INSTALL_DIR)/ios/include/libpng16/ $(PNG_INSTALL_DIR)/simulator/include/libpng16/
+
+$(PNG_SRC)/configure:
+	curl -L https://download.sourceforge.net/libpng/$(PNG_NAME).tar.gz | tar -xpf-
 
 # Leptonica target
 leptonica: clean-leptonica
@@ -193,7 +239,7 @@ tesseract: clean-tesseract autogen-tesseract
 	cp -R $(TESS_BUILD_DIR)/x86_64-simulator/include/tesseract/* $(TESS_INSTALL_DIR)/simulator/include/tesseract/
 
 # XCFramework creation
-xcframeworks: jpeg-xcframework leptonica-xcframework tesseract-xcframework
+xcframeworks: jpeg-xcframework png-xcframework leptonica-xcframework tesseract-xcframework
 
 define create_xcframework
 	mkdir -p $(FRAMEWORK_DIR)
@@ -209,6 +255,9 @@ endef
 jpeg-xcframework:
 	$(call create_xcframework,JPEG,$(JPEG_INSTALL_DIR),jpeg)
 
+png-xcframework:
+	$(call create_xcframework,PNG,$(PNG_INSTALL_DIR),png)
+
 leptonica-xcframework:
 	$(call create_xcframework,Leptonica,$(LEPT_INSTALL_DIR),leptonica)
 
@@ -221,6 +270,11 @@ clean-jpeg:
 	rm -Rf $(JPEG_INSTALL_DIR)
 	rm -Rf $(JPEG_SRC)
 
+clean-png:
+	rm -Rf $(PNG_BUILD_DIR)
+	rm -Rf $(PNG_INSTALL_DIR)
+	rm -Rf $(PNG_SRC)
+
 clean-leptonica:
 	rm -Rf $(LEPT_BUILD_DIR)
 	rm -Rf $(LEPT_INSTALL_DIR)
@@ -229,6 +283,6 @@ clean-tesseract:
 	rm -Rf $(TESS_BUILD_DIR)
 	rm -Rf $(TESS_INSTALL_DIR)
 
-clean: clean-jpeg clean-leptonica clean-tesseract
+clean: clean-jpeg clean-png clean-leptonica clean-tesseract
 	cd $(TESSERACT_SRC) && [ -f Makefile ] && $(MAKE) distclean || true
 	rm -Rf $(BUILD_DIR) $(INSTALL_DIR)
