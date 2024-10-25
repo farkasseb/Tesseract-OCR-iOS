@@ -247,7 +247,19 @@ extern NSInteger const kG8MaxCredibleResolution;
      *  @note The method returns nil, if the engine is not properly configured.
      */
 - (NSArray *_Nullable)recognizedBlocksByIteratorLevel:(G8PageIteratorLevel)pageIteratorLevel;
-    
+
+    /**
+     *  Get the recognized blocks organized in a hierarchical structure for the given page iterator level.
+     *  Each block contains child blocks for the next deeper iterator level.
+     *
+     *  @param pageIteratorLevel The page iterator level, from block down to symbol.
+     *
+     *  @return An array of G8HierarchicalRecognizedBlock objects for the given page iterator level
+     *          containing the recognized text plus child blocks of the next deeper level.
+     *          Returns nil if the engine is not properly configured.
+     */
+- (NSArray *_Nullable)recognizedHierarchicalBlocksByIteratorLevel:(G8PageIteratorLevel)pageIteratorLevel;
+
 
 #pragma mark - Debug methods
     
