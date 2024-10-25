@@ -22,8 +22,8 @@
 #import <Tesseract/ocrclass.h>
 #import <Tesseract/renderer.h>
 
-//#import "genericvector.h"
-//#import "strngs.h"
+#include <string>
+#include <vector>
 
 NSInteger const kG8DefaultResolution = 72;
 NSInteger const kG8MinCredibleResolution = 70;
@@ -190,28 +190,54 @@ namespace tesseract {
     }
 }
 
-- (BOOL)configEngine
-{
-    __block GenericVector<STRING> tessKeys;
-    __block GenericVector<STRING> tessValues;
-    [self.configDictionary enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *val, BOOL *stop) {
-        tessKeys.push_back(STRING(key.UTF8String));
-        tessValues.push_back(STRING(val.UTF8String));
-    }];
-    
-    int count = (int)self.configFileNames.count;
-    const char **configs = count ? (const char **)malloc(sizeof(const char *) * count) : NULL;
-    for (int i = 0; i < count; i++) {
-        configs[i] = ((NSString*)self.configFileNames[i]).fileSystemRepresentation;
+- (BOOL)configEngine {
+    // Convert config dictionary to vectors
+    NSUInteger count = self.configDictionary.count;
+    std::vector<std::string> vars_vec(count);
+    std::vector<std::string> vars_values(count);
+
+    // Fill vectors using array
+    NSArray *keys = [self.configDictionary allKeys];
+    for (NSUInteger i = 0; i < count; i++) {
+        NSString *key = keys[i];
+        NSString *value = self.configDictionary[key];
+        vars_vec[i] = std::string([key UTF8String]);
+        vars_values[i] = std::string([value UTF8String]);
     }
-    int returnCode = self.tesseract->Init(self.absoluteDataPath.fileSystemRepresentation, self.language.UTF8String,
+
+    // Convert config file names array
+    int configCount = (int)self.configFileNames.count;
+    char **configs = nullptr;
+
+    if (configCount > 0) {
+        configs = new char*[configCount];
+        for (int i = 0; i < configCount; i++) {
+            NSString *configFile = self.configFileNames[i];
+            const char *utf8String = [configFile UTF8String];
+            // Need to copy the string since we can't just cast const char* to char*
+            size_t len = strlen(utf8String) + 1;
+            configs[i] = new char[len];
+            strcpy(configs[i], utf8String);
+        }
+    }
+
+    // Initialize Tesseract
+    int returnCode = self.tesseract->Init(self.absoluteDataPath.fileSystemRepresentation,
+                                          self.language.UTF8String,
                                           (tesseract::OcrEngineMode)self.engineMode,
-                                          (char **)configs, count,
-                                          &tessKeys, &tessValues,
+                                          configs, configCount,
+                                          vars_vec.empty() ? nullptr : &vars_vec,
+                                          vars_values.empty() ? nullptr : &vars_values,
                                           false);
+
+    // Cleanup allocated memory
     if (configs != nullptr) {
-        free(configs);
+        for (int i = 0; i < configCount; i++) {
+            delete[] configs[i];
+        }
+        delete[] configs;
     }
+
     return returnCode == 0;
 }
 
@@ -333,13 +359,12 @@ namespace tesseract {
 }
 
 - (NSString*)variableValueForKey:(NSString *)key {
-    
     if (!self.isEngineConfigured) {
         return self.variables[key];
     } else {
-        STRING val;
+        std::string val;
         _tesseract->GetVariableAsString(key.UTF8String, &val);
-        return [NSString stringWithUTF8String:val.string()];
+        return [NSString stringWithUTF8String:val.c_str()];
     }
 }
 
@@ -867,50 +892,44 @@ namespace tesseract {
 }
 
 - (NSData *)recognizedPDFForImages:(NSArray*)images {
-  
     if (!self.isEngineConfigured) {
         return nil;
     }
-    
-    NSString *path = [self.absoluteDataPath stringByAppendingPathComponent:@"tessdata"];
-    tesseract::TessPDFRenderer *renderer = new tesseract::TessPDFRenderer(path.fileSystemRepresentation);
-    
-    // Begin producing output
-    const char* kUnknownTitle = "Unknown Title";
-    if (renderer && !renderer->BeginDocument(kUnknownTitle)) {
-        return nil; // LCOV_EXCL_LINE
-    }
-    
-    bool result = YES;
-    for (int page = 0; page < images.count && result; page++) {
+
+    // Get tessdata path directly from self.absoluteDataPath
+    NSString *tessdataPath = [self.absoluteDataPath stringByAppendingPathComponent:@"tessdata"];
+    NSString *outputPath = [self.absoluteDataPath stringByAppendingPathComponent:@"output.pdf"];
+
+    // Create PDF renderer with proper tessdata path
+    tesseract::TessPDFRenderer *renderer = new tesseract::TessPDFRenderer(
+                                                                          outputPath.fileSystemRepresentation,
+                                                                          tessdataPath.fileSystemRepresentation
+                                                                          );
+
+    // Process each page
+    bool success = renderer->BeginDocument("Tesseract OCR Result");
+
+    for (int page = 0; success && page < images.count; page++) {
         UIImage *image = images[page];
         if ([image isKindOfClass:[UIImage class]]) {
             Pix *pixs = [self pixForImage:image];
-            Pix *pix = pixConvertTo1(pixs, UINT8_MAX / 2);
+            success = success && _tesseract->ProcessPage(pixs, page, nullptr, nullptr, 0, renderer);
             pixDestroy(&pixs);
-            
-            const char *pagename = [NSString stringWithFormat:@"page #%i", page].UTF8String;
-            result = _tesseract->ProcessPage(pix, page, pagename, NULL, 0, renderer);
-            pixDestroy(&pix);
         }
     }
-    
-    //  error
-    if (!result) {
-        return nil; // LCOV_EXCL_LINE
+
+    success = success && renderer->EndDocument();
+    delete renderer;
+
+    if (!success) {
+        return nil;
     }
-    
-    // Finish producing output
-    if (renderer && !renderer->EndDocument()) {
-        return nil; // LCOV_EXCL_LINE
-    }
-    
-    const char *pdfData = NULL;
-    int pdfDataLength = 0;
-    renderer->GetOutput(&pdfData, &pdfDataLength);
-    
-    NSData *data = [NSData dataWithBytes:pdfData length:pdfDataLength];
-    return data;
+
+    // Read the generated PDF
+    NSData *pdfData = [NSData dataWithContentsOfFile:outputPath];
+    [[NSFileManager defaultManager] removeItemAtPath:outputPath error:nil];
+
+    return pdfData;
 }
 
 - (UIImage *)imageWithBlocks:(NSArray *)blocks drawText:(BOOL)drawText thresholded:(BOOL)thresholded
@@ -958,7 +977,7 @@ namespace tesseract {
     }
 
     if (self.maximumRecognitionTime > FLT_EPSILON) {
-        _monitor->set_deadline_msecs((inT32)(self.maximumRecognitionTime * 1000));
+        _monitor->set_deadline_msecs((int32_t)(self.maximumRecognitionTime * 1000));
     }
 
     self.recognized = NO;
