@@ -113,7 +113,8 @@ jpeg: clean-jpeg $(JPEG_SRC)/configure
 		$(JPEG_SRC)/configure \
 			--host="$${HOST/arm64/aarch64}" \
 			--prefix="$$INSTALL_DIR" \
-			--enable-static --disable-shared \
+			--enable-static \
+			--disable-shared \
 			--with-pic || exit 1; \
 		echo "Building jpeg for $$arch"; \
 		$(MAKE) -j8 && $(MAKE) install || exit 1; \
@@ -185,7 +186,7 @@ tiff: clean-tiff jpeg $(TIFF_SRC)/configure
 		fi; \
 		export CPPFLAGS="$$CFLAGS $$JPEG_CFLAGS"; \
 		export CXXFLAGS="$$CFLAGS $$JPEG_CFLAGS"; \
-		export LDFLAGS="$$LDFLAGS $$JPEG_LIBS"; \
+		export LDFLAGS="$$LDFLAGS $$JPEG_LIBS -lz"; \
 		echo "Configuring tiff for $$arch with host $$HOST"; \
 		$(TIFF_SRC)/configure \
 			--host="$$HOST" \
@@ -193,12 +194,6 @@ tiff: clean-tiff jpeg $(TIFF_SRC)/configure
 			--enable-static \
 			--disable-shared \
 			--enable-fast-install \
-			--disable-cxx \
-			--disable-zlib \
-			--disable-lzma \
-			--disable-webp \
-			--disable-zstd \
-			--disable-pixarlog \
 			--disable-tools \
 			--disable-tests \
 			--without-x \
@@ -247,10 +242,7 @@ leptonica: clean-leptonica jpeg png tiff
 			--with-zlib \
 			--with-jpeg \
 			--with-libpng \
-			--without-giflib \
 			--with-libtiff \
-			--without-libwebp \
-			--without-libopenjpeg \
 			--with-pic || exit 1; \
 		echo "Building Leptonica for $$arch"; \
 		$(MAKE) -j8 && $(MAKE) install || exit 1; \
@@ -299,9 +291,6 @@ tesseract: clean-tesseract autogen-tesseract leptonica
 			--disable-legacy \
 			--disable-doc \
 			--disable-openmp \
-			--without-curl \
-			--without-archive \
-			--without-tensorflow \
 			--with-pic \
 			LEPTONICA_LIBS="$$LEPTONICA_LIBS" \
 			LEPTONICA_CFLAGS="$$LEPTONICA_CFLAGS" || exit 1; \
@@ -316,8 +305,8 @@ tesseract: clean-tesseract autogen-tesseract leptonica
 		$(TESS_BUILD_DIR)/x86_64-simulator/lib/libtesseract.a \
 		-output $(TESS_INSTALL_DIR)/simulator/lib/libtesseract.a
 	@cp $(TESS_BUILD_DIR)/arm64/lib/libtesseract.a $(TESS_INSTALL_DIR)/ios/lib/
-	@cp -R $(TESS_BUILD_DIR)/arm64/include/tesseract/* $(TESS_INSTALL_DIR)/ios/include/
-	@cp -R $(TESS_BUILD_DIR)/x86_64-simulator/include/tesseract/* $(TESS_INSTALL_DIR)/simulator/include/
+	@cp -R $(TESS_BUILD_DIR)/arm64/include/* $(TESS_INSTALL_DIR)/ios/include/
+	@cp -R $(TESS_BUILD_DIR)/x86_64-simulator/include/* $(TESS_INSTALL_DIR)/simulator/include/
 	@echo "Successfully built Tesseract!"
 
 # XCFramework creation
