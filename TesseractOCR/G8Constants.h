@@ -79,23 +79,37 @@ typedef NS_ENUM(NSUInteger, G8PageSegmentationMode){
 };
 
 /**
- * When Tesseract/Cube is initialized we can choose to instantiate/load/run
- * only the Tesseract part, only the Cube part or both along with the combiner.
+ * Specifies which recognition engine(s) to use.
+ * Note: Legacy Tesseract engine is deprecated and LSTM is recommended for better accuracy.
  */
-typedef NS_ENUM(NSUInteger, G8OCREngineMode){
+typedef NS_ENUM(NSUInteger, G8OCREngineMode) {
     /**
-     *  Run Tesseract only - fastest
+     * Run legacy Tesseract engine only (fastest but deprecated)
+     * Maps to OEM_TESSERACT_ONLY
      */
-    G8OCREngineModeTesseractOnly,
+    G8OCREngineModeTesseractOnly = 0,
+
     /**
-     *  Run Cube only - better accuracy, but slower
+     * Run LSTM neural network only (recommended)
+     * Maps to OEM_LSTM_ONLY
      */
-    G8OCREngineModeCubeOnly,
+    G8OCREngineModeLSTMOnly = 1,
+
     /**
-     *  Run both and combine results - best accuracy
+     * Run LSTM with Tesseract fallback (deprecated)
+     * Maps to OEM_TESSERACT_LSTM_COMBINED
      */
-    G8OCREngineModeTesseractCubeCombined,
-//    G8OCREngineModeDefault,
+    G8OCREngineModeCombined = 2,
+
+    /**
+     * Use default mode based on config settings
+     * Maps to OEM_DEFAULT
+     */
+    G8OCREngineModeDefault = 3,
+
+    // Deprecated values maintained for backward compatibility
+    G8OCREngineModeCubeOnly DEPRECATED_MSG_ATTRIBUTE("Cube engine is no longer supported") = G8OCREngineModeLSTMOnly,
+    G8OCREngineModeTesseractCubeCombined DEPRECATED_MSG_ATTRIBUTE("Use G8OCREngineModeCombined instead") = G8OCREngineModeCombined
 };
 
 /**

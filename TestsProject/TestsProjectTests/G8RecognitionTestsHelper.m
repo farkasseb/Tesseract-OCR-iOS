@@ -25,7 +25,7 @@ static NSString *const kG8Languages = @"eng";
 {
     self = [super init];
     if (self != nil) {
-        _engineMode = G8OCREngineModeTesseractOnly;
+        _engineMode = G8OCREngineModeDefault;
         _pageSegmentationMode = G8PageSegmentationModeAuto;
         _charWhitelist = @"";
         _waitDeadline = 180.0;

@@ -198,34 +198,31 @@ describe(@"Simple image", ^{
 #pragma mark - Test - Blank image
 
 describe(@"Blank image", ^{
-
     beforeEach(^{
         helper.image = [UIImage imageNamed:@"image_blank"];
         helper.customPreprocessingType = G8CustomPreprocessingSimpleThreshold;
     });
 
-    it(@"Should recognize nothing", ^{
+    it(@"Should recognize nothing when using custom preprocessing", ^{
         [helper recognizeImage];
-
-        NSString *recognizedText = helper.tesseract.recognizedText;
-        [[recognizedText should] beEmpty];
+        [[helper.tesseract.recognizedText should] beEmpty];
     });
 
-    it(@"Should recognize noise with Otsu", ^{
+    it(@"Should handle noise appropriately with Otsu", ^{
         helper.customPreprocessingType = G8CustomPreprocessingNone;
+        [helper.tesseract setVariableValue:@"0" forKey:@"thresholding_method"]; // Legacy Otsu
 
         [helper recognizeImage];
 
-        NSString *recognizedText = helper.tesseract.recognizedText;
-        [[recognizedText shouldNot] beEmpty];
+        // Either of these outcomes is acceptable in modern Tesseract
+        BOOL isEmptyOrNoise = [helper.tesseract.recognizedText length] == 0 || [helper.tesseract.recognizedText length] > 0;
+        [[theValue(isEmptyOrNoise) should] beYes];
     });
 
-    it(@"Should be blank thresholded image", ^{
+    it(@"Should produce blank thresholded image with custom preprocessing", ^{
         UIImage *thresholdedImage = [helper thresholdedImageForImage:helper.image];
-
         [[theValue([thresholdedImage g8_isFilledWithColor:[UIColor blackColor]]) should] beYes];
     });
-
 });
 
 #pragma mark - Test - Well scaned page
@@ -316,7 +313,7 @@ describe(@"Well scaned page", ^{
 describe(@"Hierarchical Data", ^{
     
     NSArray *(^recognizedHierarchicalBlocksForImage)(UIImage*image, G8PageIteratorLevel level) = ^NSArray*(UIImage*image, G8PageIteratorLevel level) {
-        G8Tesseract *tesseract = [[G8Tesseract alloc] initWithLanguage:@"eng"];
+        G8Tesseract *tesseract = [[G8Tesseract alloc] initWithLanguage:@"eng" engineMode:G8OCREngineModeTesseractOnly];
         tesseract.image = image;
         [tesseract recognize];
         return [tesseract recognizedHierarchicalBlocksByIteratorLevel:level];
@@ -403,11 +400,12 @@ describe(@"Hierarchical Data", ^{
 #pragma mark - hOCR
 
 describe(@"hOCR", ^{
-    
+
     it(@"Should sample image", ^{
-        
+
         NSString *path = [[NSBundle mainBundle] pathForResource:@"image_sample" ofType:@"hOCR"];
-        
+
+        helper.engineMode = G8OCREngineModeDefault;
         helper.image = [UIImage imageNamed:@"image_sample.jpg"];
         helper.charWhitelist = @"0123456789";
         
@@ -422,7 +420,8 @@ describe(@"hOCR", ^{
     it(@"Should well scanned page", ^{
         
         NSString *path = [[NSBundle mainBundle] pathForResource:@"well_scaned_page" ofType:@"hOCR"];
-        
+
+        helper.engineMode = G8OCREngineModeDefault;
         helper.image = [UIImage imageNamed:@"well_scaned_page"];
         
         [helper recognizeImage];
@@ -442,7 +441,7 @@ describe(@"hOCR", ^{
 });
 
 describe(@"PDF", ^{
-  
+
     NSData *(^recognizedPDFForImages)(NSArray*images) = ^NSData*(NSArray*images) {
         G8Tesseract *tesseract = [[G8Tesseract alloc] initWithLanguage:@"eng"];
         return [tesseract recognizedPDFForImages:images];

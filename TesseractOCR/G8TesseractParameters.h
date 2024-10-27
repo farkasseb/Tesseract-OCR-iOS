@@ -1468,11 +1468,6 @@ extern NSString *const kG8ParamClassifyMinNormScaleY;
 ///@param Default 0
 extern NSString *const kG8ParamMatcherDebugFlags;
 
-///Save alternative paths found during chopping and segmentation search
-///@param Type BOOL
-///@param Default true
-extern NSString *const kG8ParamSaveAltChoices;
-
 ///Use acceptability in okstring
 ///@param Type BOOL
 ///@param Default true
@@ -2367,11 +2362,6 @@ extern NSString *const kG8ParamHeuristicWeightSeamcut DEPRECATED_ATTRIBUTE;
 ///@param Type BOOL
 ///@param Default true
 extern NSString *const kG8ParamLoadFixedLengthDawgs DEPRECATED_ATTRIBUTE;
-
-///Enable new segmentation search path.
-///@param Type BOOL
-///@param Default false
-extern NSString *const kG8ParamEnableNewSegsearch DEPRECATED_ATTRIBUTE;
 
 ///Turn on fixed-length phrasebook search permuter
 ///@param Type BOOL

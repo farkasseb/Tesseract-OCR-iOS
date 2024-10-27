@@ -288,7 +288,6 @@ tesseract: clean-tesseract autogen-tesseract leptonica
 			--prefix="$$INSTALL_DIR" \
 			--disable-shared \
 			--disable-graphics \
-			--disable-legacy \
 			--disable-doc \
 			--disable-openmp \
 			--with-pic \

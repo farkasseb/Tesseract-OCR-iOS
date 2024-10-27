@@ -8,7 +8,7 @@
 
 
 /* Disable legacy OCR engine */
-#define DISABLED_LEGACY_ENGINE 1
+/* #undef DISABLED_LEGACY_ENGINE */
 
 /* Enable float for LSTM */
 #define FAST_FLOAT 1
