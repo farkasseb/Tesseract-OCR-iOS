@@ -230,7 +230,12 @@ static bool tesseractCancelCallbackFunction(void *cancel_this, int words);
                                           false
                                           );
 
-        return returnCode == 0;
+        if (returnCode != 0) {
+            _tesseract.reset();  // Clear the pointer if initialization failed
+            return NO;
+        }
+
+        return YES;
 
     } catch (const std::exception& e) {
         NSLog(@"Error configuring Tesseract engine: %s", e.what());
@@ -419,55 +424,46 @@ static bool tesseractCancelCallbackFunction(void *cancel_this, int words);
 
     self.imageSize = image.size;
 
-    if (!_tesseract) {
-        NSLog(@"ERROR: Tesseract engine is null");
+    if (!self.isEngineConfigured) {
         _image = image;
         [self resetFlags];
         return;
     }
 
-    std::unique_ptr<g8::PixWrapper> pix;  // Will be nullptr by default
+    Pix *pix = nullptr;
 
+    // Handle preprocessing if delegate is set
     if ([self.delegate respondsToSelector:@selector(preprocessedImageForTesseract:sourceImage:)]) {
         UIImage *thresholdedImage = [self.delegate preprocessedImageForTesseract:self sourceImage:image];
-        if (thresholdedImage != nil) {
+        if (thresholdedImage) {
             self.imageSize = thresholdedImage.size;
 
-            // Get preprocessed pix
-            auto preprocessedPix = [self pixForImage:thresholdedImage];
+            // Convert preprocessed image to binary
+            Pix *preprocessedPix = [self pixForImage:thresholdedImage];
             if (preprocessedPix) {
-                Pix* rawPreprocessedPix = preprocessedPix->get();
-                if (rawPreprocessedPix) {
-                    // Convert to binary
-                    Pix* thresholdedPix = pixConvertTo1(rawPreprocessedPix, UINT8_MAX / 2);
-                    if (thresholdedPix) {
-                        pix = std::make_unique<g8::PixWrapper>(thresholdedPix);
-                    }
-                }
-            }
+                pix = pixConvertTo1(preprocessedPix, UINT8_MAX / 2);
+                pixDestroy(&preprocessedPix);
 
-            if (!pix) {
-                NSLog(@"WARNING: Can't create Pix for custom thresholded image!");
+                if (!pix) {
+                    NSLog(@"WARNING: Can't create binary Pix for preprocessed image!");
+                }
             }
         }
     }
 
-    // If preprocessing failed or wasn't requested, try original image
+    // If preprocessing failed or wasn't requested, use original image
     if (!pix) {
         pix = [self pixForImage:image];
     }
 
-    // Set the image if we have a valid pix
-    if (pix && pix->get()) {
+    // Set image in tesseract if we have a valid pix
+    if (pix) {
         @try {
-            auto *api = _tesseract.get();
-            if (api) {
-                api->SetImage(pix->get());
-            }
-        }
-        @catch (NSException *exception) {
+            _tesseract->SetImage(pix);
+        } @catch (NSException *exception) {
             NSLog(@"ERROR: Can't set image: %@", exception);
         }
+        pixDestroy(&pix);
     }
 
     _image = image;
@@ -645,16 +641,8 @@ static bool tesseractCancelCallbackFunction(void *cancel_this, int words);
     return _monitor->get()->progress;
 }
 
-/**
- * Checks if the Tesseract engine is properly configured
- * @return YES if engine is ready for use
- */
 - (BOOL)isEngineConfigured {
-    if (!_tesseract) {
-        return NO;
-    }
-    auto *api = _tesseract.get();
-    return (api != nullptr);
+    return _tesseract && _tesseract.get() != nullptr;
 }
 
 #pragma mark - Result fetching
@@ -1052,11 +1040,6 @@ static bool tesseractCancelCallbackFunction(void *cancel_this, int words);
     return [NSString stringWithUTF8String:hocr.get()];
 }
 
-/**
- * Generates a searchable PDF from recognized text
- * @param images Array of images to process
- * @return PDF data or nil if engine not configured
- */
 - (NSData *)recognizedPDFForImages:(NSArray *)images {
     if (!self.isEngineConfigured) {
         return nil;
@@ -1087,14 +1070,17 @@ static bool tesseractCancelCallbackFunction(void *cancel_this, int words);
                 continue;
             }
 
-            auto pix = [self pixForImage:image];
-            if (!pix || !pix->get()) {
+            Pix *pix = [self pixForImage:image];
+            if (!pix) {
                 continue;
             }
 
-            if (!_tesseract->ProcessPage(pix->get(), pageIndex, "", nullptr, 0, renderer.get())) {
+            if (!_tesseract->ProcessPage(pix, pageIndex, "", nullptr, 0, renderer.get())) {
+                pixDestroy(&pix);
                 return nil;
             }
+
+            pixDestroy(&pix);
         }
 
         if (!renderer->EndDocument()) {
@@ -1250,12 +1236,11 @@ static bool tesseractCancelCallbackFunction(void *cancel_this, int words);
     return image;
 }
 
-/**
- * Creates a Pix object from a UIImage, handling different image orientations and bit depths
- * @param image Source UIImage to convert
- * @return Unique pointer to PixWrapper containing the converted image
- */
-- (std::unique_ptr<g8::PixWrapper>)pixForImage:(UIImage *)image {
+- (Pix *)pixForImage:(UIImage *)image {
+    if (!image) {
+        return nullptr;
+    }
+
     int width = image.size.width;
     int height = image.size.height;
 
@@ -1264,6 +1249,10 @@ static bool tesseractCancelCallbackFunction(void *cancel_this, int words);
     }
 
     CGImage *cgImage = image.CGImage;
+    if (!cgImage) {
+        return nullptr;
+    }
+
     CFDataRef imageData = CGDataProviderCopyData(CGImageGetDataProvider(cgImage));
     if (!imageData) {
         return nullptr;
@@ -1281,13 +1270,10 @@ static bool tesseractCancelCallbackFunction(void *cancel_this, int words);
         return nullptr;
     }
 
-    // Create RAII wrapper for the Pix
-    auto pixWrapper = std::make_unique<g8::PixWrapper>(pix);
-
     l_uint32 *data = pixGetData(pix);
     int wpl = pixGetWpl(pix);
 
-    // Rest of the pixForImage implementation remains the same until the end
+    // Define copy block for pixel data transfer
     void (^copyBlock)(l_uint32 *toAddr, NSUInteger toOffset, const UInt8 *fromAddr, NSUInteger fromOffset) = nil;
     switch (bpp) {
         case 8: {
@@ -1305,104 +1291,100 @@ static bool tesseractCancelCallbackFunction(void *cancel_this, int words);
         }
         default:
             NSLog(@"Cannot convert image to Pix with bpp = %d", bpp);
+            pixDestroy(&pix);
             CFRelease(imageData);
             return nullptr;
     }
 
-    // Original orientation handling code stays the same
-    if (copyBlock) {
-        switch (image.imageOrientation) {
-            case UIImageOrientationUp:
-                // Maintain byte order consistency across different endianness.
-                for (int y = 0; y < height; ++y, pixels += bytesPerRow, data += wpl) {
-                    for (int x = 0; x < width; ++x) {
-                        copyBlock(data, x, pixels, x * bytesPerPixel);
-                    }
-                }
-                break;
-
-            case UIImageOrientationUpMirrored:
-                // Maintain byte order consistency across different endianness.
-                for (int y = 0; y < height; ++y, pixels += bytesPerRow, data += wpl) {
-                    int maxX = width - 1;
-                    for (int x = maxX; x >= 0; --x) {
-                        copyBlock(data, maxX - x, pixels, x * bytesPerPixel);
-                    }
-                }
-                break;
-
-            case UIImageOrientationDown:
-                // Maintain byte order consistency across different endianness.
-                pixels += (height - 1) * bytesPerRow;
-                for (int y = height - 1; y >= 0; --y, pixels -= bytesPerRow, data += wpl) {
-                    int maxX = width - 1;
-                    for (int x = maxX; x >= 0; --x) {
-                        copyBlock(data, maxX - x, pixels, x * bytesPerPixel);
-                    }
-                }
-                break;
-
-            case UIImageOrientationDownMirrored:
-                // Maintain byte order consistency across different endianness.
-                pixels += (height - 1) * bytesPerRow;
-                for (int y = height - 1; y >= 0; --y, pixels -= bytesPerRow, data += wpl) {
-                    for (int x = 0; x < width; ++x) {
-                        copyBlock(data, x, pixels, x * bytesPerPixel);
-                    }
-                }
-                break;
-
-            case UIImageOrientationLeft:
-                // Maintain byte order consistency across different endianness.
-                for (int x = 0; x < height; ++x, data += wpl) {
-                    int maxY = width - 1;
-                    for (int y = maxY; y >= 0; --y) {
-                        int x0 = y * (int)bytesPerRow + x * (int)bytesPerPixel;
-                        copyBlock(data, maxY - y, pixels, x0);
-                    }
-                }
-                break;
-
-            case UIImageOrientationLeftMirrored:
-                // Maintain byte order consistency across different endianness.
-                for (int x = height - 1; x >= 0; --x, data += wpl) {
-                    int maxY = width - 1;
-                    for (int y = maxY; y >= 0; --y) {
-                        int x0 = y * (int)bytesPerRow + x * (int)bytesPerPixel;
-                        copyBlock(data, maxY - y, pixels, x0);
-                    }
-                }
-                break;
-
-            case UIImageOrientationRight:
-                // Maintain byte order consistency across different endianness.
-                for (int x = height - 1; x >=0; --x, data += wpl) {
-                    for (int y = 0; y < width; ++y) {
-                        int x0 = y * (int)bytesPerRow + x * (int)bytesPerPixel;
-                        copyBlock(data, y, pixels, x0);
-                    }
-                }
-                break;
-
-            case UIImageOrientationRightMirrored:
-                // Maintain byte order consistency across different endianness.
-                for (int x = 0; x < height; ++x, data += wpl) {
-                    for (int y = 0; y < width; ++y) {
-                        int x0 = y * (int)bytesPerRow + x * (int)bytesPerPixel;
-                        copyBlock(data, y, pixels, x0);
-                    }
-                }
-                break;
-
-            default:
-                break;  // LCOV_EXCL_LINE
-        }
+    if (!copyBlock) {
+        pixDestroy(&pix);
+        CFRelease(imageData);
+        return nullptr;
     }
 
-    pixSetYRes(pix, (l_int32)self.sourceResolution);
-    CFRelease(imageData);
+    // Handle image orientation and copy pixel data
+    switch (image.imageOrientation) {
+        case UIImageOrientationUp:
+            for (int y = 0; y < height; ++y, pixels += bytesPerRow, data += wpl) {
+                for (int x = 0; x < width; ++x) {
+                    copyBlock(data, x, pixels, x * bytesPerPixel);
+                }
+            }
+            break;
 
-    return pixWrapper;
+        case UIImageOrientationUpMirrored:
+            for (int y = 0; y < height; ++y, pixels += bytesPerRow, data += wpl) {
+                int maxX = width - 1;
+                for (int x = maxX; x >= 0; --x) {
+                    copyBlock(data, maxX - x, pixels, x * bytesPerPixel);
+                }
+            }
+            break;
+
+        case UIImageOrientationDown:
+            pixels += (height - 1) * bytesPerRow;
+            for (int y = height - 1; y >= 0; --y, pixels -= bytesPerRow, data += wpl) {
+                int maxX = width - 1;
+                for (int x = maxX; x >= 0; --x) {
+                    copyBlock(data, maxX - x, pixels, x * bytesPerPixel);
+                }
+            }
+            break;
+
+        case UIImageOrientationDownMirrored:
+            pixels += (height - 1) * bytesPerRow;
+            for (int y = height - 1; y >= 0; --y, pixels -= bytesPerRow, data += wpl) {
+                for (int x = 0; x < width; ++x) {
+                    copyBlock(data, x, pixels, x * bytesPerPixel);
+                }
+            }
+            break;
+
+        case UIImageOrientationLeft:
+            for (int x = 0; x < height; ++x, data += wpl) {
+                int maxY = width - 1;
+                for (int y = maxY; y >= 0; --y) {
+                    int x0 = y * (int)bytesPerRow + x * (int)bytesPerPixel;
+                    copyBlock(data, maxY - y, pixels, x0);
+                }
+            }
+            break;
+
+        case UIImageOrientationLeftMirrored:
+            for (int x = height - 1; x >= 0; --x, data += wpl) {
+                int maxY = width - 1;
+                for (int y = maxY; y >= 0; --y) {
+                    int x0 = y * (int)bytesPerRow + x * (int)bytesPerPixel;
+                    copyBlock(data, maxY - y, pixels, x0);
+                }
+            }
+            break;
+
+        case UIImageOrientationRight:
+            for (int x = height - 1; x >= 0; --x, data += wpl) {
+                for (int y = 0; y < width; ++y) {
+                    int x0 = y * (int)bytesPerRow + x * (int)bytesPerPixel;
+                    copyBlock(data, y, pixels, x0);
+                }
+            }
+            break;
+
+        case UIImageOrientationRightMirrored:
+            for (int x = 0; x < height; ++x, data += wpl) {
+                for (int y = 0; y < width; ++y) {
+                    int x0 = y * (int)bytesPerRow + x * (int)bytesPerPixel;
+                    copyBlock(data, y, pixels, x0);
+                }
+            }
+            break;
+    }
+
+    if (self.sourceResolution > 0) {
+        pixSetYRes(pix, (l_int32)self.sourceResolution);
+    }
+
+    CFRelease(imageData);
+    return pix;
 }
 
 - (void)tesseractProgressCallbackFunction:(int)words {
