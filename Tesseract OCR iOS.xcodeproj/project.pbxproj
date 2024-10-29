@@ -27,35 +27,12 @@
 		C51904D02CCD7DD000C4A3CA /* G8TextMonitor.h in Headers */ = {isa = PBXBuildFile; fileRef = C51904CE2CCD7DD000C4A3CA /* G8TextMonitor.h */; };
 		C51904D12CCD7DD000C4A3CA /* G8TextMonitor.mm in Sources */ = {isa = PBXBuildFile; fileRef = C51904CF2CCD7DD000C4A3CA /* G8TextMonitor.mm */; };
 		C5697AAC2CCB635500904AE7 /* Tesseract.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C5209E202CC9FEA900F98013 /* Tesseract.xcframework */; };
-		C5697AAD2CCB635500904AE7 /* Tesseract.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C5209E202CC9FEA900F98013 /* Tesseract.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C5697AAE2CCB635500904AE7 /* Leptonica.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C532680D2CC46CC800D8C3ED /* Leptonica.xcframework */; };
-		C5697AAF2CCB635500904AE7 /* Leptonica.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C532680D2CC46CC800D8C3ED /* Leptonica.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C5697AB02CCB635500904AE7 /* TIFF.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C5209E1F2CC9FEA900F98013 /* TIFF.xcframework */; };
-		C5697AB12CCB635500904AE7 /* TIFF.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C5209E1F2CC9FEA900F98013 /* TIFF.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C5697AB22CCB635500904AE7 /* PNG.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C5209E222CC9FEA900F98013 /* PNG.xcframework */; };
-		C5697AB32CCB635500904AE7 /* PNG.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C5209E222CC9FEA900F98013 /* PNG.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C5697AB42CCB635500904AE7 /* JPEG.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C5209E212CC9FEA900F98013 /* JPEG.xcframework */; };
-		C5697AB52CCB635500904AE7 /* JPEG.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C5209E212CC9FEA900F98013 /* JPEG.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C5697AB82CCB679F00904AE7 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C5697AB72CCB679F00904AE7 /* Accelerate.framework */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		C5697AB62CCB635500904AE7 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				C5697AB12CCB635500904AE7 /* TIFF.xcframework in Embed Frameworks */,
-				C5697AB52CCB635500904AE7 /* JPEG.xcframework in Embed Frameworks */,
-				C5697AAD2CCB635500904AE7 /* Tesseract.xcframework in Embed Frameworks */,
-				C5697AAF2CCB635500904AE7 /* Leptonica.xcframework in Embed Frameworks */,
-				C5697AB32CCB635500904AE7 /* PNG.xcframework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		4141211F1A4C578800583ED4 /* G8TesseractDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = G8TesseractDelegate.h; sourceTree = "<group>"; };
@@ -217,7 +194,6 @@
 				73C0A7781A592C2B00D823D4 /* Frameworks */,
 				73C0A7791A592C2B00D823D4 /* Headers */,
 				73C0A77A1A592C2B00D823D4 /* Resources */,
-				C5697AB62CCB635500904AE7 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);

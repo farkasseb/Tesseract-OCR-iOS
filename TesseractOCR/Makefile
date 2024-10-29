@@ -41,6 +41,11 @@ TESSERACT_SRC = $(TESSERACT_ROOT)/$(TESSERACT_NAME)
 TESS_BUILD_DIR = $(BUILD_DIR)/tesseract
 TESS_INSTALL_DIR = $(INSTALL_DIR)/tesseract
 
+WORKSPACE = $(TESSERACT_ROOT)/../Tesseract-OCR-iOS.xcworkspace
+SCHEME = TesseractOCR
+FRAMEWORK_NAME = TesseractOCR
+ARCHIVES_DIR = $(BUILD_DIR)/archives
+
 # Function to determine platform directory
 define get_platform_dir
 case "$(1)" in \
@@ -51,7 +56,7 @@ case "$(1)" in \
 esac
 endef
 
-# Common exports for all builds
+# Common exports for all dependency builds
 define COMMON_EXPORTS
 	export CC="clang"; \
 	export CXX="clang++"; \
@@ -84,13 +89,13 @@ define DEVICE_FLAGS
 endef
 
 # Targets
-.PHONY: all build frameworks jpeg png tiff leptonica tesseract autogen-tesseract xcframeworks jpeg-xcframework png-xcframework tiff-xcframework leptonica-xcframework tesseract-xcframework clean clean-jpeg clean-png clean-tiff clean-leptonica clean-tesseract distclean-tesseract clean-frameworks clean-all
+.PHONY: all build frameworks jpeg png tiff leptonica tesseract autogen-tesseract xcframeworks jpeg-xcframework png-xcframework tiff-xcframework leptonica-xcframework tesseract-xcframework clean clean-jpeg clean-png clean-tiff clean-leptonica clean-tesseract distclean-tesseract clean-frameworks clean-all tesseract-ocr tesseract-ocr-archives tesseract-ocr-xcframework
 
 all: build frameworks
 
 build: jpeg png tiff leptonica tesseract
 
-frameworks: xcframeworks
+frameworks: xcframeworks tesseract-ocr-xcframework
 
 # JPEG target
 jpeg: clean-jpeg $(JPEG_SRC)/configure
@@ -308,6 +313,31 @@ tesseract: clean-tesseract autogen-tesseract leptonica
 	@cp -R $(TESS_BUILD_DIR)/x86_64-simulator/include/* $(TESS_INSTALL_DIR)/simulator/include/
 	@echo "Successfully built Tesseract!"
 
+# TesseractOCR framework target
+tesseract-ocr-archives:
+	@echo "Building TesseractOCR archives..."
+	@mkdir -p $(ARCHIVES_DIR)
+	
+	@echo "Building iOS archive..."
+	xcodebuild archive \
+		-workspace $(WORKSPACE) \
+		-scheme $(SCHEME) \
+		-destination "generic/platform=iOS,name=Any iOS Device" \
+		-archivePath $(ARCHIVES_DIR)/ios.xcarchive \
+		SKIP_INSTALL=NO \
+		BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+	
+	@echo "Building iOS Simulator archive..."
+	xcodebuild archive \
+		-workspace $(WORKSPACE) \
+		-scheme $(SCHEME) \
+		-destination "generic/platform=iOS Simulator" \
+		-archivePath $(ARCHIVES_DIR)/ios-simulator.xcarchive \
+		SKIP_INSTALL=NO \
+		BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+	
+	@echo "Successfully created archives!"
+
 # XCFramework creation
 xcframeworks: jpeg-xcframework png-xcframework tiff-xcframework leptonica-xcframework tesseract-xcframework
 
@@ -338,6 +368,18 @@ leptonica-xcframework:
 tesseract-xcframework:
 	$(call create_xcframework,Tesseract,$(TESS_INSTALL_DIR),tesseract)
 
+tesseract-ocr-xcframework: tesseract-ocr-archives
+	@echo "Creating TesseractOCR.xcframework..."
+	@mkdir -p $(FRAMEWORK_DIR)
+	@rm -rf $(FRAMEWORK_DIR)/$(FRAMEWORK_NAME).xcframework
+	
+	xcodebuild -create-xcframework \
+		-framework $(ARCHIVES_DIR)/ios.xcarchive/Products/Library/Frameworks/$(FRAMEWORK_NAME).framework \
+		-framework $(ARCHIVES_DIR)/ios-simulator.xcarchive/Products/Library/Frameworks/$(FRAMEWORK_NAME).framework \
+		-output $(FRAMEWORK_DIR)/$(FRAMEWORK_NAME).xcframework
+	
+	@echo "Successfully created $(FRAMEWORK_NAME).xcframework!"
+
 # Clean targets
 clean-jpeg:
 	@rm -rf $(JPEG_BUILD_DIR)
@@ -362,10 +404,13 @@ clean-tesseract:
 	@rm -rf $(TESS_BUILD_DIR)
 	@rm -rf $(TESS_INSTALL_DIR)
 
+clean-tesseract-ocr:
+	@rm -rf $(ARCHIVES_DIR)
+
 clean-frameworks:
 	@rm -rf $(FRAMEWORK_DIR)
 
-clean: clean-jpeg clean-png clean-tiff clean-leptonica clean-tesseract
+clean: clean-jpeg clean-png clean-tiff clean-leptonica clean-tesseract clean-tesseract-ocr
 	@cd $(TESSERACT_SRC) && [ -f Makefile ] && $(MAKE) distclean || true
 	@rm -rf $(BUILD_DIR) $(INSTALL_DIR)
 
